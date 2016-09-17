@@ -138,13 +138,18 @@ int zslRandomLevel(void) {
 
 /* Insert a new node in the skiplist. Assumes the element does not already
  * exist (up to the caller to enforce that). The skiplist takes ownership
- * of the passed SDS string 'ele'. */
+ * of the passed SDS string 'ele'. 
+ * 在跳表zsl中插入分数为score值为ele的节点
+ * 插入过程中可能会变更当前调表zsl的level*/
 zskiplistNode *zslInsert(zskiplist *zsl, double score, sds ele) {
     zskiplistNode *update[ZSKIPLIST_MAXLEVEL], *x;
     unsigned int rank[ZSKIPLIST_MAXLEVEL];
     int i, level;
 
     serverAssert(!isnan(score));
+    // 定位待插入节点在每一层的位置即
+    // update[]存储了每一层需要更新的节点这些节点都是在对应level链表上x的前置节点
+    // rank[]存储"到第i层的前置节点为止"待插入节点的排名
     x = zsl->header;
     for (i = zsl->level-1; i >= 0; i--) {
         /* store rank that is crossed to reach the insert position */
@@ -162,7 +167,11 @@ zskiplistNode *zslInsert(zskiplist *zsl, double score, sds ele) {
     /* we assume the element is not already inside, since we allow duplicated
      * scores, reinserting the same element should never happen since the
      * caller of zslInsert() should test in the hash table if the element is
-     * already inside or not. */
+     * already inside or not. 
+     *
+     * 我们假设调表中当前是不存在带插入节点的，因为我们允许存在相同的score
+     * 这里随机生成带插入节点的level，如果随机生成的level大于当前zsl的level
+     * 则需要初始化对应新层上的header节点，也就是相应层上的前置节点*/
     level = zslRandomLevel();
     if (level > zsl->level) {
         for (i = zsl->level; i < level; i++) {
@@ -172,6 +181,10 @@ zskiplistNode *zslInsert(zskiplist *zsl, double score, sds ele) {
         }
         zsl->level = level;
     }
+
+    /* 实际插入节点的操作
+     * 除了修改插入节点以及前置节点的指针之外，还需要更新对应节点span
+     * */
     x = zslCreateNode(level,score,ele);
     for (i = 0; i < level; i++) {
         x->level[i].forward = update[i]->level[i].forward;
@@ -187,6 +200,7 @@ zskiplistNode *zslInsert(zskiplist *zsl, double score, sds ele) {
         update[i]->level[i].span++;
     }
 
+    // 更新当前节点”实际的排名“的前置节点和其”实际排名“后置节点的实际前置节点
     x->backward = (update[0] == zsl->header) ? NULL : update[0];
     if (x->level[0].forward)
         x->level[0].forward->backward = x;

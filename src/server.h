@@ -723,9 +723,14 @@ typedef struct zskiplistNode {
     // 分数的double表示
     double score;
 
+    // 当前节点按照实际分数排名的前置节点
     struct zskiplistNode *backward;
+   
+    // 当前节点在每一层的后置节点数组  
     struct zskiplistLevel {
         struct zskiplistNode *forward;
+        // 在当前层当前节点和其后置节点之间实际包含的节点个数（也就是level0层的节点数）
+        // （]不包括当前节点，但是包括其后置节点
         unsigned int span;
     } level[];
 } zskiplistNode;
