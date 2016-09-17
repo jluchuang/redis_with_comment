@@ -1,5 +1,11 @@
 This README is just a fast *quick start* document. You can find more detailed documentation at http://redis.io.
 
+What to do?
+--------------
+
+This folder is forked from Redis unstable(https://github.com/antirez/redis). 
+I just add some comment, while reading the src code~ 
+
 What is Redis?
 --------------
 
