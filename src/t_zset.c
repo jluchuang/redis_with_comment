@@ -522,7 +522,8 @@ zskiplistNode* zslGetElementByRank(zskiplist *zsl, unsigned long rank) {
     return NULL;
 }
 
-/* Populate the rangespec according to the objects min and max. */
+/* Populate the rangespec according to the objects min and max.
+ * 这个方法将用两个robj 的有效数据来填充spec的区间*/
 static int zslParseRange(robj *min, robj *max, zrangespec *spec) {
     char *eptr;
     spec->minex = spec->maxex = 0;
@@ -535,6 +536,7 @@ static int zslParseRange(robj *min, robj *max, zrangespec *spec) {
         spec->min = (long)min->ptr;
     } else {
         if (((char*)min->ptr)[0] == '(') {
+            // 将min->ptr指向内存数据作为double解释
             spec->min = strtod((char*)min->ptr+1,&eptr);
             if (eptr[0] != '\0' || isnan(spec->min)) return C_ERR;
             spec->minex = 1;
@@ -573,7 +575,8 @@ static int zslParseRange(robj *min, robj *max, zrangespec *spec) {
   * returned.
   *
   * If the string is not a valid range C_ERR is returned, and the value
-  * of *dest and *ex is undefined. */
+  * of *dest and *ex is undefined. 
+  * 这里robj *item的ptr指向的内存应该是一个sds*/
 int zslParseLexRangeItem(robj *item, sds *dest, int *ex) {
     char *c = item->ptr;
 
@@ -614,7 +617,8 @@ void zslFreeLexRange(zlexrangespec *spec) {
  *
  * Return C_OK on success. On error C_ERR is returned.
  * When OK is returned the structure must be freed with zslFreeLexRange(),
- * otherwise no release is needed. */
+ * otherwise no release is needed. 
+ * 实现用min和max来填充字符区间结构spec*/
 int zslParseLexRange(robj *min, robj *max, zlexrangespec *spec) {
     /* The range can't be valid if objects are integer encoded.
      * Every item must start with ( or [. */
@@ -653,7 +657,9 @@ int zslLexValueLteMax(sds value, zlexrangespec *spec) {
         (sdscmplex(value,spec->max) <= 0);
 }
 
-/* Returns if there is a part of the zset is in the lex range. */
+/* Returns if there is a part of the zset is in the lex range.
+ * 判断zsl中是否有节点的ele字段按照字典序落在range中
+ * 有交集则返回1， 否则返回0 */
 int zslIsInLexRange(zskiplist *zsl, zlexrangespec *range) {
     zskiplistNode *x;
 
@@ -672,7 +678,9 @@ int zslIsInLexRange(zskiplist *zsl, zlexrangespec *range) {
 }
 
 /* Find the first node that is contained in the specified lex range.
- * Returns NULL when no element is contained in the range. */
+ * Returns NULL when no element is contained in the range. 
+ * 返回按照字典序落在range中的zsl中的最左节点，也就是第一个大于或等于rang->min
+ */
 zskiplistNode *zslFirstInLexRange(zskiplist *zsl, zlexrangespec *range) {
     zskiplistNode *x;
     int i;
@@ -692,7 +700,7 @@ zskiplistNode *zslFirstInLexRange(zskiplist *zsl, zlexrangespec *range) {
     x = x->level[0].forward;
     serverAssert(x != NULL);
 
-    /* Check if score <= max. */
+    /* Check if ele <= max. */
     if (!zslLexValueLteMax(x->ele,range)) return NULL;
     return x;
 }
@@ -717,7 +725,7 @@ zskiplistNode *zslLastInLexRange(zskiplist *zsl, zlexrangespec *range) {
     /* This is an inner range, so this node cannot be NULL. */
     serverAssert(x != NULL);
 
-    /* Check if score >= min. */
+    /* Check if ele >= min. */
     if (!zslLexValueGteMin(x->ele,range)) return NULL;
     return x;
 }
