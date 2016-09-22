@@ -32,9 +32,25 @@
 #define __INTSET_H
 #include <stdint.h>
 
+/**
+ * intset 是一个有序的整数列表
+ * 按照数值由小到大増序排列 
+ * */ 
 typedef struct intset {
+    /**
+     * 列表的编码方式，三中编码方式，规定了content数组中每个元素的解释方式
+     * 定义在intset.c中
+     * */ 
     uint32_t encoding;
+
+    /**
+     * 列表长度
+     * */ 
     uint32_t length;
+
+    /**
+     * 实际存储数据的连续字节数组，按照encoding方式解释
+     * */
     int8_t contents[];
 } intset;
 

@@ -36,12 +36,29 @@
 #include "endianconv.h"
 
 /* Note that these encodings are ordered, so:
- * INTSET_ENC_INT16 < INTSET_ENC_INT32 < INTSET_ENC_INT64. */
+ * INTSET_ENC_INT16 < INTSET_ENC_INT32 < INTSET_ENC_INT64.
+ * typedef struct intset {
+ *     uint32_t encoding; 
+ *     unit32_t length; 
+ *     uint8_t contents[]; 
+ * }intset;
+ *
+ * 查看redis endianconv.c可以知道，redis尝试将所有数据都按照
+ * 小端字节序存储， 所以在intset的各种方法中都会调用相关宏定义
+ * 命名格式： memmory reverse if big endian
+ * 也就是如果当前运行环境系统定义字节序是大端字节序的话，所有
+ * redis定义的数据类型的相关内存变量在使用或者结果返回的时候
+ * 都有要进行字节序转换LITTLE ENDIAN -> BIG ENDIAN
+ * 注意：以下这三个宏定义是按照系统字节序的，所以每次使用
+ * intset,判断其编码方式之前都可能需要对intset的encoding字段进行
+ * 字节序转换，也就是调用相应的宏定义
+ * */
 #define INTSET_ENC_INT16 (sizeof(int16_t))
 #define INTSET_ENC_INT32 (sizeof(int32_t))
 #define INTSET_ENC_INT64 (sizeof(int64_t))
 
-/* Return the required encoding for the provided value. */
+/* Return the required encoding for the provided value. 
+ * 根据给定int型变量v的大小返回v的编码标识*/
 static uint8_t _intsetValueEncoding(int64_t v) {
     if (v < INT32_MIN || v > INT32_MAX)
         return INTSET_ENC_INT64;
@@ -51,7 +68,11 @@ static uint8_t _intsetValueEncoding(int64_t v) {
         return INTSET_ENC_INT16;
 }
 
-/* Return the value at pos, given an encoding. */
+/* Return the value at pos, given an encoding.
+ * @param uint_8 enc [in] 编码方式，已经转换为当前系统字节序
+ * @param intset *is [in] 按照enc编码的整数集合 
+ * @param int pos    [in] is按照enc进行解释的content位置下标
+ * @return 返回按enc编码的整数集合intset中，pos位置的数值*/ 
 static int64_t _intsetGetEncoded(intset *is, int pos, uint8_t enc) {
     int64_t v64;
     int32_t v32;
@@ -72,12 +93,18 @@ static int64_t _intsetGetEncoded(intset *is, int pos, uint8_t enc) {
     }
 }
 
-/* Return the value at pos, using the configured encoding. */
+/* Return the value at pos, using the configured encoding.
+ * @param intset *is [in] 整数集合
+ * @param int pos [in] 位置
+ * 返回给定的整数集合is在pos位置的数值  */
 static int64_t _intsetGet(intset *is, int pos) {
     return _intsetGetEncoded(is,pos,intrev32ifbe(is->encoding));
 }
 
-/* Set the value at pos, using the configured encoding. */
+/* Set the value at pos, using the configured encoding.
+ * @param intset *is [in] 整数集合
+ * @param int pos [in] 需要赋值的位置
+ * @param int64_t value [in] 目标值 */
 static void _intsetSet(intset *is, int pos, int64_t value) {
     uint32_t encoding = intrev32ifbe(is->encoding);
 
@@ -111,18 +138,24 @@ static intset *intsetResize(intset *is, uint32_t len) {
 /* Search for the position of "value". Return 1 when the value was found and
  * sets "pos" to the position of the value within the intset. Return 0 when
  * the value is not present in the intset and sets "pos" to the position
- * where "value" can be inserted. */
+ * where "value" can be inserted. 
+ * @param intset *is [in] 整数列表
+ * @param int64_t value [in] 查找的目标值
+ * @param uint32_t *pos [in/out] 返回最终目标值在is中的位置或者可插入位置
+ * @return 查找成功，即value已经存在is中返回1，否则返回0*/
 static uint8_t intsetSearch(intset *is, int64_t value, uint32_t *pos) {
     int min = 0, max = intrev32ifbe(is->length)-1, mid = -1;
     int64_t cur = -1;
 
-    /* The value can never be found when the set is empty */
+    /* The value can never be found when the set is empty 
+     * 空列表，则直接返回*/
     if (intrev32ifbe(is->length) == 0) {
         if (pos) *pos = 0;
         return 0;
     } else {
         /* Check for the case where we know we cannot find the value,
-         * but do know the insert position. */
+         * but do know the insert position. 
+         * 判断两种极端情况，value在当前列表的数值区间范围内*/
         if (value > _intsetGet(is,intrev32ifbe(is->length)-1)) {
             if (pos) *pos = intrev32ifbe(is->length);
             return 0;
@@ -132,6 +165,9 @@ static uint8_t intsetSearch(intset *is, int64_t value, uint32_t *pos) {
         }
     }
 
+    /**
+     * 二分查找
+     * */
     while(max >= min) {
         mid = ((unsigned int)min + (unsigned int)max) >> 1;
         cur = _intsetGet(is,mid);
