@@ -179,7 +179,8 @@ typedef struct zlentry {
 
 void ziplistRepr(unsigned char *zl);
 
-/* Return bytes needed to store integer encoded by 'encoding' */
+/* Return bytes needed to store integer encoded by 'encoding' 
+ * 根据encoding类型返回存储整数类型的字节长度*/
 static unsigned int zipIntSize(unsigned char encoding) {
     switch(encoding) {
     case ZIP_INT_8B:  return 1;
@@ -194,13 +195,20 @@ static unsigned int zipIntSize(unsigned char encoding) {
 }
 
 /* Encode the length 'rawlen' writing it in 'p'. If p is NULL it just returns
- * the amount of bytes required to encode such a length. */
+ * the amount of bytes required to encode such a length.
+ * 根据给定的encoding编码方式和字符串的长度rawlen来生成相应字符串在ziplist中存储的
+ * header头部编码信息， 编码信息存储在指针p所指向的内存中， 并返回存储header所需字节数
+ * @param unsigned char *p [in/out] p!=NULL 时p是最终header编码结果存储地址指针
+ * @param unsigned char encoding [in] 编码前缀用于执行编码类型字符串/整数
+ * @param unsigned int rawlen [in] 实际字符串的长度（字节数），当encoding是整数类型时无效
+ * @return 返回存储header编码信息所需要的字节长度，p不为空时，p所指内存会保存最终的header编码*/ 
 static unsigned int zipEncodeLength(unsigned char *p, unsigned char encoding, unsigned int rawlen) {
     unsigned char len = 1, buf[5];
 
     if (ZIP_IS_STR(encoding)) {
         /* Although encoding is given it may not be set for strings,
-         * so we determine it here using the raw length. */
+         * so we determine it here using the raw length.
+         * 给定encoding类型是字符串型编码 */
         if (rawlen <= 0x3f) {
             if (!p) return len;
             buf[0] = ZIP_STR_06B | rawlen;
@@ -219,7 +227,8 @@ static unsigned int zipEncodeLength(unsigned char *p, unsigned char encoding, un
             buf[4] = rawlen & 0xff;
         }
     } else {
-        /* Implies integer encoding, so length is always 1. */
+        /* Implies integer encoding, so length is always 1.
+         * 整数类型头部编码长度永远是1 */
         if (!p) return len;
         buf[0] = encoding;
     }
@@ -232,7 +241,14 @@ static unsigned int zipEncodeLength(unsigned char *p, unsigned char encoding, un
 /* Decode the length encoded in 'ptr'. The 'encoding' variable will hold the
  * entries encoding, the 'lensize' variable will hold the number of bytes
  * required to encode the entries length, and the 'len' variable will hold the
- * entries length. */
+ * entries length.
+ *
+ * 解码ptr所执行内存存储的的zipentry编码信息 
+ * @param ptr 内存编码信息存储地址
+ * @param encoding 编码信息（字符串/整数）
+ * @param lensize 存储编码信息所需要的字节长度
+ * @param len zipentry实际有效信息的字节数
+ * 注意这里是宏定义，故而所有的参数都是[in/out]*/
 #define ZIP_DECODE_LENGTH(ptr, encoding, lensize, len) do {                    \
     ZIP_ENTRY_ENCODING((ptr), (encoding));                                     \
     if ((encoding) < ZIP_STR_MASK) {                                           \
@@ -258,7 +274,11 @@ static unsigned int zipEncodeLength(unsigned char *p, unsigned char encoding, un
 } while(0);
 
 /* Encode the length of the previous entry and write it to "p". Return the
- * number of bytes needed to encode this length if "p" is NULL. */
+ * number of bytes needed to encode this length if "p" is NULL. 
+ * 对zipEntry前置节点的长度信息进行编码
+ * @param unsigned char *p [in/out] 存储最终生成的前置节点长度编码信息
+ * @param unsigned int len [in] 前置节点的长度字节数
+ * @return 返回最终的前置长度信息编码存储所需的字节数*/
 static unsigned int zipPrevEncodeLength(unsigned char *p, unsigned int len) {
     if (p == NULL) {
         return (len < ZIP_BIGLEN) ? 1 : sizeof(len)+1;
@@ -315,10 +335,16 @@ static int zipPrevLenByteDiff(unsigned char *p, unsigned int len) {
     return zipPrevEncodeLength(NULL, len) - prevlensize;
 }
 
-/* Return the total number of bytes used by the entry pointed to by 'p'. */
+/* Return the total number of bytes used by the entry pointed to by 'p'.
+ * 返回p最指向的zipEntry的总字节数contents + header的total size */
 static unsigned int zipRawEntryLength(unsigned char *p) {
     unsigned int prevlensize, encoding, lensize, len;
+    // 获取前置节点的长度信息编码所需字节数
     ZIP_DECODE_PREVLENSIZE(p, prevlensize);
+
+    // 获取当前节点的长度信息
+    // header编码信息 encoding + length 所需的长度保存在lensize中
+    // contents有效信息长度保存在len中
     ZIP_DECODE_LENGTH(p + prevlensize, encoding, lensize, len);
     return prevlensize + lensize + len;
 }
