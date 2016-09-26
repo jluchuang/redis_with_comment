@@ -444,7 +444,10 @@ static int64_t zipLoadInteger(unsigned char *p, unsigned char encoding) {
     return ret;
 }
 
-/* Return a struct with all information about an entry. */
+/* Return a struct with all information about an entry.
+ * 根据指针p所指向的内存空间返回一个ziplistEntry 保存在e所指的内存中
+ * @param unsigned char *p [in] ziplist编码的内存空间 
+ * @param zlentry *e [in/out] 根据p所指内存解释生成的ziplist Entry*/
 static void zipEntry(unsigned char *p, zlentry *e) {
 
     ZIP_DECODE_PREVLEN(p, e->prevrawlensize, e->prevrawlen);
@@ -453,7 +456,13 @@ static void zipEntry(unsigned char *p, zlentry *e) {
     e->p = p;
 }
 
-/* Create a new empty ziplist. */
+/* Create a new empty ziplist. 
+ * 新建一个空的ziplist
+ * 并初始化所有ziplist header信息：
+ * 1. zlbytes: ziplist的总字节数
+ * 2. zltail: header到end节点的字节数 
+ * 3. zllength: ziplist的entry数
+ * 4. 初始化zlend节点*/
 unsigned char *ziplistNew(void) {
     unsigned int bytes = ZIPLIST_HEADER_SIZE+1;
     unsigned char *zl = zmalloc(bytes);
@@ -464,7 +473,8 @@ unsigned char *ziplistNew(void) {
     return zl;
 }
 
-/* Resize the ziplist. */
+/* Resize the ziplist. 
+ * 这里只是更改了当前ziplist的大小并重新申请了空间，并没有对原有的entries进行调整*/
 static unsigned char *ziplistResize(unsigned char *zl, unsigned int len) {
     zl = zrealloc(zl,len);
     ZIPLIST_BYTES(zl) = intrev32ifbe(len);
