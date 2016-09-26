@@ -407,7 +407,12 @@ static void zipSaveInteger(unsigned char *p, int64_t value, unsigned char encodi
     }
 }
 
-/* Read integer encoded as 'encoding' from 'p' */
+/* Read integer encoded as 'encoding' from 'p' 
+ * 按照给定的encoding编码方式来获取指针p所指向内存的整数
+ * @param unsigned char *p [in] 
+ * @param unsigned char encoding [in] p所指向内存的编码方式
+ * 当encoding的编码方式是0到12之间的立即数时，指针p无效
+ * @return 返回系统字节序的整形结果*/
 static int64_t zipLoadInteger(unsigned char *p, unsigned char encoding) {
     int16_t i16;
     int32_t i32;
