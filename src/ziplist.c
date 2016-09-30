@@ -305,7 +305,10 @@ static void zipPrevEncodeLengthForceLarge(unsigned char *p, unsigned int len) {
 }
 
 /* Decode the number of bytes required to store the length of the previous
- * element, from the perspective of the entry pointed to by 'ptr'. */
+ * element, from the perspective of the entry pointed to by 'ptr'. 
+ * 宏定义，所以每个参数都是[in/out] 
+ * @param ptr zipEntry指针 
+ * @param prevlensize 返回ptr所对应zipEntry的存储前置节点长度的编码字节长度*/
 #define ZIP_DECODE_PREVLENSIZE(ptr, prevlensize) do {                          \
     if ((ptr)[0] < ZIP_BIGLEN) {                                               \
         (prevlensize) = 1;                                                     \
@@ -332,6 +335,7 @@ static void zipPrevEncodeLengthForceLarge(unsigned char *p, unsigned int len) {
 static int zipPrevLenByteDiff(unsigned char *p, unsigned int len) {
     unsigned int prevlensize;
     ZIP_DECODE_PREVLENSIZE(p, prevlensize);
+
     return zipPrevEncodeLength(NULL, len) - prevlensize;
 }
 
@@ -501,7 +505,15 @@ static unsigned char *ziplistResize(unsigned char *zl, unsigned int len) {
  * field implies the ziplist is holding large entries anyway.
  *
  * The pointer "p" points to the first entry that does NOT need to be
- * updated, i.e. consecutive fields MAY need an update. */
+ * updated, i.e. consecutive fields MAY need an update. 
+ * 
+ * ZipList的内存调整操做，调整p之后的节点prevlen的编码信息
+ * @param unsigned char *zl [in] ziplist
+ * @param unsigned char *p [in] 不需要调整的节点，后面的节点需要进行调整
+ * 
+ * 这里调整主要考虑到cascade的调整操作
+ * 需要注意的是，ziplist中允许节点的prevlen编码信息大于本身编码信息所需的空间
+ * 也就是说，即使前置zipentry整体len小于255的时候，也可以用5节进行编码 */
 static unsigned char *__ziplistCascadeUpdate(unsigned char *zl, unsigned char *p) {
     size_t curlen = intrev32ifbe(ZIPLIST_BYTES(zl)), rawlen, rawlensize;
     size_t offset, noffset, extra;
@@ -511,20 +523,31 @@ static unsigned char *__ziplistCascadeUpdate(unsigned char *zl, unsigned char *p
     while (p[0] != ZIP_END) {
         zipEntry(p, &cur);
         rawlen = cur.headersize + cur.len;
+
+        // 获取当前zipentry的长度编码所需字节数
         rawlensize = zipPrevEncodeLength(NULL,rawlen);
 
-        /* Abort if there is no next entry. */
+        /* Abort if there is no next entry. 
+         * 如果当前节点是tail节点，则不需要设置后置节点*/
         if (p[rawlen] == ZIP_END) break;
         zipEntry(p+rawlen, &next);
 
-        /* Abort when "prevlen" has not changed. */
+        /* Abort when "prevlen" has not changed. 
+         * 后置节点的编码长度不需改变*/
         if (next.prevrawlen == rawlen) break;
 
+        /* 后置节点需要更多的字节
+         * 来对当前节点的长度进行编码*/ 
         if (next.prevrawlensize < rawlensize) {
             /* The "prevlen" field of "next" needs more bytes to hold
              * the raw length of "cur". */
             offset = p-zl;
             extra = rawlensize-next.prevrawlensize;
+            /** 
+             * 这里由于ziplistResize方法内部调用的realloc方法
+             * 所以zl原来的内存会被完整的copy到当前zl指向的地址
+             * 因此zl+offset之前的内存空间不需要任何改变
+             * */
             zl = ziplistResize(zl,curlen+extra);
             p = zl+offset;
 
@@ -550,9 +573,13 @@ static unsigned char *__ziplistCascadeUpdate(unsigned char *zl, unsigned char *p
         } else {
             if (next.prevrawlensize > rawlensize) {
                 /* This would result in shrinking, which we want to avoid.
-                 * So, set "rawlen" in the available bytes. */
+                 * So, set "rawlen" in the available bytes. 
+                 * 当前节点的长度小于原来的前置节点长度
+                 * ，则强行的将当前节点长度设置到后置节点的prevlen编码的后四个中
+                 * 以减少内存操作*/
                 zipPrevEncodeLengthForceLarge(p+rawlen,rawlen);
             } else {
+                // 所需编码长度没变
                 zipPrevEncodeLength(p+rawlen,rawlen);
             }
 
@@ -576,6 +603,9 @@ static unsigned char *__ziplistDelete(unsigned char *zl, unsigned char *p, unsig
         deleted++;
     }
 
+    /**
+     * totlen是总共要删除的字节长度
+     * */ 
     totlen = p-first.p;
     if (totlen > 0) {
         if (p[0] != ZIP_END) {
