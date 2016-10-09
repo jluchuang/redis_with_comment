@@ -36,6 +36,12 @@
 #define strtold(a,b) ((long double)strtod((a),(b)))
 #endif
 
+/**
+ * 创建对象
+ * @param int type [in]  类型
+ * @param void *ptr [in] 实际数据存储地址
+ * @return 返回RedisObject对象指针
+ */
 robj *createObject(int type, void *ptr) {
     robj *o = zmalloc(sizeof(*o));
     o->type = type;
@@ -62,7 +68,9 @@ robj *createObject(int type, void *ptr) {
  * A common patter to create shared objects:
  *
  * robj *myobject = makeObjectShared(createObject(...));
- *
+ * 
+ * 创建一个共享对象，共享对象的refcount是INT_MAX， 
+ * 在对任何对象的refcount进行增加或减少时，redis都会对这个特殊值进行判断
  */
 robj *makeObjectShared(robj *o) {
     serverAssert(o->refcount == 1);
@@ -71,14 +79,20 @@ robj *makeObjectShared(robj *o) {
 }
 
 /* Create a string object with encoding OBJ_ENCODING_RAW, that is a plain
- * string object where o->ptr points to a proper sds string. */
+ * string object where o->ptr points to a proper sds string. 
+ * 新建一个sdsString类型的对象
+ * @param const char *ptr [in] 字符串指针 
+ * @param size_t len [in] 字符串长度 */
 robj *createRawStringObject(const char *ptr, size_t len) {
     return createObject(OBJ_STRING,sdsnewlen(ptr,len));
 }
 
 /* Create a string object with encoding OBJ_ENCODING_EMBSTR, that is
  * an object where the sds string is actually an unmodifiable string
- * allocated in the same chunk as the object itself. */
+ * allocated in the same chunk as the object itself.
+ *
+ * 新建一个sdsString类型的对象，与之前方法不同的地方在于，
+ * sds存储在robj对象的连续空间内，并且为const不可更改的*/
 robj *createEmbeddedStringObject(const char *ptr, size_t len) {
     robj *o = zmalloc(sizeof(robj)+sizeof(struct sdshdr8)+len+1);
     struct sdshdr8 *sh = (void*)(o+1);
