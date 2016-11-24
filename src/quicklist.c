@@ -90,16 +90,17 @@ static const size_t optimization_level[] = {4096, 8192, 16384, 32768, 65536};
 #endif
 
 /* Create a new quicklist.
- * Free with quicklistRelease(). */
+ * Free with quicklistRelease(). 
+ * Quicklist 是一个双向链表，双线链表中的每个节点都是ziplist*/
 quicklist *quicklistCreate(void) {
     struct quicklist *quicklist;
 
     quicklist = zmalloc(sizeof(*quicklist));
     quicklist->head = quicklist->tail = NULL;
-    quicklist->len = 0;
-    quicklist->count = 0;
-    quicklist->compress = 0;
-    quicklist->fill = -2;
+    quicklist->len = 0;                      // 双向链表中ziplist节点的个数 
+    quicklist->count = 0;                    // 双向链表中所有ziplist节点中有效数据节点的总数
+    quicklist->compress = 0;                 // 双向链表两端不被压缩的节点个数      
+    quicklist->fill = -2;                    // 双线链表节点中（每个ziplist）最多能存储的实际数据个数或者总字节数
     return quicklist;
 }
 

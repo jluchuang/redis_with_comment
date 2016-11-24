@@ -133,6 +133,9 @@ robj *createStringObject(const char *ptr, size_t len) {
         return createRawStringObject(ptr,len);
 }
 
+/**
+ * 创建一个将long long 型value作为sds保存的对象
+ * */ 
 robj *createStringObjectFromLongLong(long long value) {
     robj *o;
     if (value >= 0 && value < OBJ_SHARED_INTEGERS) {
