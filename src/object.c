@@ -82,7 +82,9 @@ robj *makeObjectShared(robj *o) {
  * string object where o->ptr points to a proper sds string. 
  * 新建一个sdsString类型的对象
  * @param const char *ptr [in] 字符串指针 
- * @param size_t len [in] 字符串长度 */
+ * @param size_t len [in] 字符串长度 
+ * OBJ_ENCODING_RAW 编码类型的字符串对象会触发两次内存malloc操作
+ * */
 robj *createRawStringObject(const char *ptr, size_t len) {
     return createObject(OBJ_STRING,sdsnewlen(ptr,len));
 }
@@ -92,7 +94,8 @@ robj *createRawStringObject(const char *ptr, size_t len) {
  * allocated in the same chunk as the object itself.
  *
  * 新建一个sdsString类型的对象，与之前方法不同的地方在于，
- * sds存储在robj对象的连续空间内，并且为const不可更改的*/
+ * sds存储在robj对象的连续空间内
+ * OBJ_ENCODING_EMBSTR 编码的字符串对象只需要进行一次内存malloc操作*/
 robj *createEmbeddedStringObject(const char *ptr, size_t len) {
     robj *o = zmalloc(sizeof(robj)+sizeof(struct sdshdr8)+len+1);
     struct sdshdr8 *sh = (void*)(o+1);
@@ -124,7 +127,9 @@ robj *createEmbeddedStringObject(const char *ptr, size_t len) {
  * used.
  *
  * The current limit of 39 is chosen so that the biggest string object
- * we allocate as EMBSTR will still fit into the 64 byte arena of jemalloc. */
+ * we allocate as EMBSTR will still fit into the 64 byte arena of jemalloc. 
+ *
+ * 根据给定的ptr字符串长度来决定创建字符串对象的编码方式*/
 #define OBJ_ENCODING_EMBSTR_SIZE_LIMIT 44
 robj *createStringObject(const char *ptr, size_t len) {
     if (len <= OBJ_ENCODING_EMBSTR_SIZE_LIMIT)
@@ -135,6 +140,8 @@ robj *createStringObject(const char *ptr, size_t len) {
 
 /**
  * 创建一个将long long 型value作为sds保存的对象
+ * 首先判断value值的范围，来决定最终创建的long long对象的编码方式
+ * OBJ_ENCODING_INT or OBJ_ENCODING_RAW
  * */ 
 robj *createStringObjectFromLongLong(long long value) {
     robj *o;
@@ -158,7 +165,10 @@ robj *createStringObjectFromLongLong(long long value) {
  * however this results in loss of precision. Otherwise exp format is used
  * and the output of snprintf() is not modified.
  *
- * The 'humanfriendly' option is used for INCRBYFLOAT and HINCRBYFLOAT. */
+ * The 'humanfriendly' option is used for INCRBYFLOAT and HINCRBYFLOAT.
+ * 根据给定的 long double 浮点型变量创建String 对象，
+ *  首先将浮点型变量转换成char数组，在根据对应数组的的长度决定
+ *  创建的String对象的EDCODING */
 robj *createStringObjectFromLongDouble(long double value, int humanfriendly) {
     char buf[256];
     int len = ld2string(buf,sizeof(buf),value,humanfriendly);
@@ -172,7 +182,9 @@ robj *createStringObjectFromLongDouble(long double value, int humanfriendly) {
  * (or a string object that contains a representation of a small integer)
  * will always result in a fresh object that is unshared (refcount == 1).
  *
- * The resulting object always has refcount set to 1. */
+ * The resulting object always has refcount set to 1. 
+ * 复制String对象，并且保证复制后的对象与原对象有相同的编码方式
+ * 返回的复制对象的引用计数会被设置为1*/
 robj *dupStringObject(const robj *o) {
     robj *d;
 
@@ -194,6 +206,9 @@ robj *dupStringObject(const robj *o) {
     }
 }
 
+/**
+ * 创建Quicklist对象， 对象的编码方式为OBJ_ENCODING_QUICKLIST
+ * */
 robj *createQuicklistObject(void) {
     quicklist *l = quicklistCreate();
     robj *o = createObject(OBJ_LIST,l);
@@ -201,6 +216,9 @@ robj *createQuicklistObject(void) {
     return o;
 }
 
+/**
+ * 创建ziplist对象， 对象的编码方式为OBJ_ENCODING_ZIPLIST
+ * */
 robj *createZiplistObject(void) {
     unsigned char *zl = ziplistNew();
     robj *o = createObject(OBJ_LIST,zl);
@@ -208,6 +226,9 @@ robj *createZiplistObject(void) {
     return o;
 }
 
+/**
+ * 创建dict对象， 编码方式为OBJ_ENCODING_HT
+ * */
 robj *createSetObject(void) {
     dict *d = dictCreate(&setDictType,NULL);
     robj *o = createObject(OBJ_SET,d);
@@ -215,6 +236,9 @@ robj *createSetObject(void) {
     return o;
 }
 
+/**
+ * 创建intset对象， 编码方式为OBJ_ENCODING_INTSET
+ * */
 robj *createIntsetObject(void) {
     intset *is = intsetNew();
     robj *o = createObject(OBJ_SET,is);
@@ -222,6 +246,13 @@ robj *createIntsetObject(void) {
     return o;
 }
 
+/**
+ * 在使用ziplist作为hash对象的底层实现的时候
+ * hashtable中的键和值总是作为ziplist中紧挨着的两个节点
+ * 满足以下两个条件的hash对象的底层实现是ziplist：
+ * 1. hash对象中保存的所有键值对的键和值的字符串长度都小于64字节
+ * 2. 哈希对象保存的键值对数量小于512个；
+ * */
 robj *createHashObject(void) {
     unsigned char *zl = ziplistNew();
     robj *o = createObject(OBJ_HASH, zl);
@@ -229,6 +260,9 @@ robj *createHashObject(void) {
     return o;
 }
 
+/** 
+ * 创建有序Set对象， 编码方式OBJ_ENCODING_SKIPLIST
+ * */
 robj *createZsetObject(void) {
     zset *zs = zmalloc(sizeof(*zs));
     robj *o;
@@ -240,6 +274,9 @@ robj *createZsetObject(void) {
     return o;
 }
 
+/**
+ * 创建有序集合的ziplist底层实现对象
+ * */
 robj *createZsetZiplistObject(void) {
     unsigned char *zl = ziplistNew();
     robj *o = createObject(OBJ_ZSET,zl);
@@ -378,6 +415,9 @@ int isSdsRepresentableAsLongLong(sds s, long long *llval) {
     return string2ll(s,sdslen(s),llval) ? C_OK : C_ERR;
 }
 
+/**
+ * 判断当前对象存储的是否为long long类型数据
+ * */
 int isObjectRepresentableAsLongLong(robj *o, long long *llval) {
     serverAssertWithInfo(NULL,o,o->type == OBJ_STRING);
     if (o->encoding == OBJ_ENCODING_INT) {
@@ -388,7 +428,13 @@ int isObjectRepresentableAsLongLong(robj *o, long long *llval) {
     }
 }
 
-/* Try to encode a string object in order to save space */
+/* Try to encode a string object in order to save space 
+ * 对string类型对象进行编码， 主要是为了节约存储空间
+ * 主要针对三中情况： 
+ * 1. OBJ_ENCODING_RAW -> OBJ_ENCODING_INT 
+ * 2. OBJ_ENCODING_RAW -> OBJ_ENCODING_EMBSTR 
+ * 3. 如果没有办法进行编码转换， 干掉当前String对象对应的SDS内部的多余字节空间
+ * */
 robj *tryObjectEncoding(robj *o) {
     long value;
     sds s = o->ptr;
